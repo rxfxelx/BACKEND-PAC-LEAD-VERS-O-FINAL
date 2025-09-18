@@ -1,9 +1,9 @@
-
+# db.py
 """
 Camada de acesso ao banco para o back-end da plataforma PacLead.
-Requer: psycopg2-binary
-Tabelas esperadas (campos principais):
+Requer: psycopg2-binary (ou psycopg[binary] se preferir psycopg3)
 
+Tabelas necessárias:
 - users(id, name, cpf, cnpj, email, password_hash, created_at, updated_at)
 - leads(id, cnpj, name, phone, status, classification, created_at, updated_at)
 - products(id, cnpj, name, description, price, image_url, created_at, updated_at)
@@ -12,14 +12,10 @@ Tabelas esperadas (campos principais):
                  whatsapp_number, send_site BOOLEAN, site_url, send_product BOOLEAN,
                  created_at, updated_at)
 - whatsapp_sessions(cnpj PRIMARY KEY, token, subdomain, phone, status, qr_code, created_at, updated_at)
-
 """
 import psycopg2
 import psycopg2.extras
 from typing import Optional, Dict, Any, List
-import datetime
-import os
-
 from config import DATABASE_URL
 
 def get_connection():
@@ -27,9 +23,7 @@ def get_connection():
         raise RuntimeError("DATABASE_URL não está definido")
     return psycopg2.connect(DATABASE_URL)
 
-# ================================
-# Usuários
-# ================================
+# ===== Usuários =====
 def get_user_by_email(email: str) -> Optional[dict]:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -37,43 +31,44 @@ def get_user_by_email(email: str) -> Optional[dict]:
             row = cur.fetchone()
             return dict(row) if row else None
 
-def create_user(name: str, cpf: str, cnpj: str, email: str, password_hash: str) -> dict:
+def create_user(name: str, cpf: str | None, cnpj: str | None, email: str, password_hash: str) -> dict:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO users (name, cpf, cnpj, email, password_hash, created_at, updated_at)
-                VALUES (%s,%s,%s,%s,%s, NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
                 RETURNING *;
-            """, (name, cpf, cnpj, email, password_hash))
+                """,
+                (name, cpf, cnpj, email, password_hash)
+            )
             row = cur.fetchone()
             conn.commit()
             return dict(row)
 
-# ================================
-# Leads
-# ================================
-def get_all_leads_by_cnpj(cnpj: str) -> list:
+# ===== Leads =====
+def get_all_leads_by_scope(scope_id: str) -> list:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT * FROM leads WHERE cnpj = %s ORDER BY updated_at DESC, created_at DESC
-            """, (cnpj,))
+            cur.execute(
+                """SELECT * FROM leads WHERE cnpj = %s ORDER BY updated_at DESC, created_at DESC""",
+                (scope_id,)
+            )
             rows = cur.fetchall()
             return [dict(r) for r in rows]
 
-# ================================
-# Produtos
-# ================================
-def get_products_by_cnpj(cnpj: str) -> list:
+# ===== Produtos =====
+def get_products_by_scope(scope_id: str) -> list:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT * FROM products WHERE cnpj = %s ORDER BY created_at DESC
-            """, (cnpj,))
+            cur.execute(
+                """SELECT * FROM products WHERE cnpj = %s ORDER BY created_at DESC""",
+                (scope_id,)
+            )
             rows = cur.fetchall()
             return [dict(r) for r in rows]
 
-def create_product(cnpj: str, product: Dict[str, Any]) -> dict:
+def create_product(scope_id: str, product: Dict[str, Any]) -> dict:
     name = product.get("name")
     description = product.get("description")
     price = product.get("price")
@@ -83,33 +78,33 @@ def create_product(cnpj: str, product: Dict[str, Any]) -> dict:
 
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO products (cnpj, name, description, price, image_url, created_at, updated_at)
                 VALUES (%s,%s,%s,%s,%s, NOW(), NOW())
                 RETURNING *;
-            """, (cnpj, name, description, price, image_url))
+                """,
+                (scope_id, name, description, price, image_url)
+            )
             row = cur.fetchone()
             conn.commit()
             return dict(row)
 
-# ================================
-# Configurações do Agente
-# ================================
-def get_agent_settings(cnpj: str) -> Optional[dict]:
+# ===== Configs do Agente =====
+def get_agent_settings(scope_id: str) -> Optional[dict]:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""SELECT * FROM agent_settings WHERE cnpj = %s LIMIT 1""", (cnpj,))
+            cur.execute("""SELECT * FROM agent_settings WHERE cnpj = %s LIMIT 1""", (scope_id,))
             row = cur.fetchone()
             return dict(row) if row else None
 
-def update_agent_settings(cnpj: str, settings: Dict[str, Any]) -> dict:
-    # Campos suportados
+def update_agent_settings(scope_id: str, settings: Dict[str, Any]) -> dict:
     agent_name = settings.get("agent_name")
     communication_style = settings.get("communication_style")
     sector = settings.get("sector")
     profile_type = settings.get("profile_type")
     description = settings.get("description")
-    faq = settings.get("faq")  # deve ser lista/JSON serializável
+    faq = settings.get("faq")  # lista/dict serializável
     instructions = settings.get("instructions")
     notify_whatsapp = settings.get("notify_whatsapp")
     whatsapp_number = settings.get("whatsapp_number")
@@ -119,7 +114,8 @@ def update_agent_settings(cnpj: str, settings: Dict[str, Any]) -> dict:
 
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO agent_settings
                   (cnpj, agent_name, communication_style, sector, profile_type, description,
                    faq, instructions, notify_whatsapp, whatsapp_number, send_site, site_url, send_product,
@@ -143,20 +139,23 @@ def update_agent_settings(cnpj: str, settings: Dict[str, Any]) -> dict:
                    send_product = EXCLUDED.send_product,
                    updated_at = NOW()
                 RETURNING *;
-            """, (cnpj, agent_name, communication_style, sector, profile_type, description,
+                """,
+                (
+                    scope_id, agent_name, communication_style, sector, profile_type, description,
                     psycopg2.extras.Json(faq) if faq is not None else None,
-                    instructions, notify_whatsapp, whatsapp_number, send_site, site_url, send_product))
+                    instructions, notify_whatsapp, whatsapp_number, send_site, site_url, send_product
+                )
+            )
             row = cur.fetchone()
             conn.commit()
             return dict(row)
 
-# ================================
-# Sessões do WhatsApp (UAZAPI)
-# ================================
-def upsert_whatsapp_session(cnpj: str, token: str, subdomain: str, phone: str, status: str, qr_code: str) -> dict:
+# ===== Sessões do WhatsApp (UAZAPI) =====
+def upsert_whatsapp_session(scope_id: str, token: str, subdomain: str, phone: str | None, status: str, qr_code: str) -> dict:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO whatsapp_sessions
                   (cnpj, token, subdomain, phone, status, qr_code, created_at, updated_at)
                 VALUES
@@ -169,14 +168,16 @@ def upsert_whatsapp_session(cnpj: str, token: str, subdomain: str, phone: str, s
                   qr_code = EXCLUDED.qr_code,
                   updated_at = NOW()
                 RETURNING *;
-            """, (cnpj, token, subdomain, phone, status, qr_code))
+                """,
+                (scope_id, token, subdomain, phone, status, qr_code)
+            )
             row = cur.fetchone()
             conn.commit()
             return dict(row)
 
-def get_whatsapp_session(cnpj: str) -> Optional[dict]:
+def get_whatsapp_session(scope_id: str) -> Optional[dict]:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""SELECT * FROM whatsapp_sessions WHERE cnpj = %s LIMIT 1""", (cnpj,))
+            cur.execute("""SELECT * FROM whatsapp_sessions WHERE cnpj = %s LIMIT 1""", (scope_id,))
             row = cur.fetchone()
             return dict(row) if row else None
