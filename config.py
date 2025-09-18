@@ -1,28 +1,33 @@
+
 import os
 from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente de um arquivo .env, caso exista. Isso é útil em
-# desenvolvimento local. Em produção, o Railway injeta automaticamente
-# as variáveis definidas na configuração do serviço.
+# Carrega variáveis de ambiente (.env para dev; no Railway são injetadas no serviço)
 load_dotenv()
 
-# Configurações do banco de dados
+# =====================
+# Banco de dados
+# =====================
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-# Configurações de autenticação JWT
-# Chave secreta utilizada para assinar os tokens. Deve ser definida nas
-# variáveis de ambiente de produção para garantir segurança. Uma chave
-# aleatória forte é recomendada (por exemplo, gerada com openssl).
+# =====================
+# Autenticação JWT
+# =====================
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change_this_secret_key")
-
-# Algoritmo de criptografia utilizado para o JWT. HS256 é o padrão.
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-
-# Tempo de expiração do token, em segundos. O valor padrão de 86400
-# corresponde a 24 horas. Ajuste conforme a necessidade de segurança.
+# Expiração do token em segundos (padrão: 86400 = 24h)
 JWT_EXPIRATION_SECONDS = int(os.getenv("JWT_EXPIRATION_SECONDS", "86400"))
 
-# Conta padrão (CNPJ) usada para isolar dados em cada instância da API.
-# Opcional: caso a plataforma permita múltiplas empresas via multitenant,
-# esse valor será obtido do usuário autenticado em vez de um valor fixo.
-ACCOUNT_CNPJ = os.getenv("ACCOUNT_CNPJ", "")
+# =====================
+# UAZAPI (WhatsApp)
+# =====================
+# Base da API (ex.: https://hia-clientes.uazapi.com)
+UAZAPI_BASE = os.getenv("UAZAPI_BASE", "https://hia-clientes.uazapi.com")
+# Token padrão (administrativo) para conectar instâncias (pode ser por conta)
+UAZAPI_TOKEN = os.getenv("UAZAPI_TOKEN", "")
+
+# =====================
+# CORS
+# =====================
+# Separe múltiplas origens por vírgula (ex.: https://app.exemplo.com,https://*.vercel.app)
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")]
